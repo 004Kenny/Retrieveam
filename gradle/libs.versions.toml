@@ -1,0 +1,50 @@
+[versions]
+activityVersion = "1.4.0"
+agp = "8.3.2"
+appcompatVersion = "1.6.1"
+glideVersion = "4.14.2"
+junit = "4.13.2"
+googleServices = "4.3.14"
+firebaseBom = "31.0.2"
+junitVersion = "1.2.1"
+espressoCore = "3.6.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+activity = "1.8.0"
+constraintlayout = "2.1.4"
+lifecycle = "2.6.1"
+glide = "4.14.2"
+firebaseFirestore = "25.0.0"
+firebaseStorage = "21.0.0"
+googleServicesVersion = "4.4.2"
+materialVersion = "1.6.1"
+mongodbDriverSync = "4.3.2"
+opencvAndroid = "4.5.5"
+playServicesLocation = "21.3.0"
+
+[libraries]
+activity-v140 = { module = "androidx.activity:activity", version.ref = "activityVersion" }
+appcompat-v161 = { module = "androidx.appcompat:appcompat", version.ref = "appcompatVersion" }
+compiler = { module = "com.github.bumptech.glide:compiler", version.ref = "glideVersion" }
+glide = { module = "com.github.bumptech.glide:glide", version.ref = "glideVersion" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-storage = { module = "com.google.firebase:firebase-storage" }
+ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+google-firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
+google-firebase-storage = { group = "com.google.firebase", name = "firebase-storage", version.ref = "firebaseStorage" }
+google-services = { group = "com.google.gms", name = "google-services", version.ref = "googleServicesVersion" }
+material-v161 = { module = "com.google.android.material:material", version.ref = "materialVersion" }
+mongodb-driver-sync = { module = "org.mongodb:mongodb-driver-sync", version.ref = "mongodbDriverSync" }
+opencv-android = { module = "org.opencv:opencv-android", version.ref = "opencvAndroid" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
+
+[plugins]
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+
