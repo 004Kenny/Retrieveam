@@ -1,7 +1,5 @@
 package com.example.finder;
 
-import static android.content.ContentValues.TAG;
-
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -31,18 +29,14 @@ import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
-import com.google.firebase.storage.UploadTask;
 
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfKeyPoint;
 import org.opencv.features2d.ORB;
@@ -84,11 +78,11 @@ public class ItemDetailsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_item_details);
 
         // Initialize OpenCV
-        if (OpenCVLoader.initLocal()) {
-            Log.i(TAG, "OpenCV loaded successfully");
+        if (OpenCVLoader.initDebug()) {
+            Log.i("OpenCV", "OpenCV loaded successfully");
         } else {
-            Log.e(TAG, "OpenCV initialization failed!");
-            (Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG)).show();
+            Log.e("OpenCV", "OpenCV initialization failed!");
+            Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -106,22 +100,35 @@ public class ItemDetailsActivity extends AppCompatActivity {
         dateEditText = findViewById(R.id.dateEditText);
         categorySpinner = findViewById(R.id.categorySpinner);
 
-        // Setup spinner with categories from strings.xml
-        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
-                this,
-                R.array.item_categories,
-                android.R.layout.simple_spinner_item
-        );
+        // Initialize location client
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
+        // Set up category spinner
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+                R.array.category_array, android.R.layout.simple_spinner_item);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         categorySpinner.setAdapter(adapter);
 
         // Set onClick listeners
-        backButton.setOnClickListener(view -> finish());
+        backButton.setOnClickListener(view -> onBackPressed());
         selectImageButton.setOnClickListener(view -> openGallery());
         submitButton.setOnClickListener(view -> submitItemDetails());
 
-        // Initialize location client
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        // Location callback
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(@NonNull LocationResult locationResult) {
+                if (locationResult == null) {
+                    return;
+                }
+                for (Location location : locationResult.getLocations()) {
+                    lastKnownLocation = location;
+                }
+            }
+        };
+
+        // Request location permission
+        requestLocationPermission();
     }
 
     private void openGallery() {
@@ -146,46 +153,30 @@ public class ItemDetailsActivity extends AppCompatActivity {
     private void submitItemDetails() {
         String description = descriptionEditText.getText().toString().trim();
         String date = dateEditText.getText().toString().trim();
-        String category = categorySpinner.getSelectedItem().toString().trim();
-
-        // Validate date format (assuming yyyy-MM-dd format)
-        if (!isValidDate(date)) {
-            Toast.makeText(this, "Date should be in yyyy-MM-dd format.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        String category = categorySpinner.getSelectedItem().toString();
 
         if (description.isEmpty() || date.isEmpty() || category.isEmpty() || selectedImageUri == null) {
-            Toast.makeText(this, "All fields are required, including an image.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Please fill all fields and select an image.", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Check if user is logged in
         FirebaseUser currentUser = auth.getCurrentUser();
         if (currentUser == null) {
-            Toast.makeText(this, "You need to be logged in to submit an item.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "User not authenticated.", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Request location permissions if not granted
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
-            return;
-        }
+        String userId = currentUser.getUid();
 
-        // Extract features from the selected image
-        extractImageFeatures(description, date, category, currentUser.getUid());
-    }
-
-    private boolean isValidDate(String date) {
-        // Simple validation for yyyy-MM-dd format
-        return date.matches("\\d{4}-\\d{2}-\\d{2}");
-    }
-
-    private void extractImageFeatures(String description, String date, String category, String userId) {
+        // Convert the bitmap to a Mat object
+        Bitmap bitmap = null;
         try {
-            Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), selectedImageUri);
+            bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), selectedImageUri);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
-            // Convert the bitmap to a Mat object
+        if (bitmap != null) {
             Mat imgMat = new Mat();
             org.opencv.android.Utils.bitmapToMat(bitmap, imgMat);
             Imgproc.cvtColor(imgMat, imgMat, Imgproc.COLOR_RGBA2GRAY);
@@ -200,102 +191,45 @@ public class ItemDetailsActivity extends AppCompatActivity {
             List<Double> descriptorList = new ArrayList<>();
             for (int i = 0; i < descriptors.rows(); i++) {
                 for (int j = 0; j < descriptors.cols(); j++) {
-                    descriptorList.add(descriptors.get(i, j)[0]);
+                    descriptorList.add((double) descriptors.get(i, j)[0]);
                 }
             }
 
-            uploadImageAndSubmit(description, date, category, userId, descriptorList);
-        } catch (IOException e) {
-            e.printStackTrace();
-            Toast.makeText(this, "Failed to extract image features: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            // Upload image to Firebase Storage
+            StorageReference storageRef = storage.getReference().child("images/" + selectedImageUri.getLastPathSegment());
+            storageRef.putFile(selectedImageUri).addOnSuccessListener(taskSnapshot -> storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                // Save item details to Firestore
+                Map<String, Object> item = new HashMap<>();
+                item.put("description", description);
+                item.put("date", date);
+                item.put("category", category);
+                item.put("imageUrl", uri.toString());
+                item.put("userId", userId);
+                item.put("timestamp", FieldValue.serverTimestamp());
+                item.put("descriptors", descriptorList);
+                if (lastKnownLocation != null) {
+                    List<Double> locationList = new ArrayList<>();
+                    locationList.add(lastKnownLocation.getLatitude());
+                    locationList.add(lastKnownLocation.getLongitude());
+                    item.put("location", locationList);
+                }
+
+                firestore.collection("items")
+                        .add(item)
+                        .addOnSuccessListener(documentReference -> {
+                            Toast.makeText(ItemDetailsActivity.this, "Item submitted successfully.", Toast.LENGTH_SHORT).show();
+                            finish();
+                        })
+                        .addOnFailureListener(e -> Toast.makeText(ItemDetailsActivity.this, "Error submitting item.", Toast.LENGTH_SHORT).show());
+            })).addOnFailureListener(e -> Toast.makeText(ItemDetailsActivity.this, "Error uploading image.", Toast.LENGTH_SHORT).show());
         }
     }
 
-    private void uploadImageAndSubmit(String description, String date, String category, String userId, List<Double> descriptorList) {
-        // Check last known location
-        if (lastKnownLocation == null) {
-            Toast.makeText(this, "Could not determine your location. Please try again later.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        StorageReference storageRef = storage.getReference().child("item_images/" + System.currentTimeMillis() + ".jpg");
-        storageRef.putFile(selectedImageUri)
-                .addOnSuccessListener(taskSnapshot -> {
-                    storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                        String imageUrl = uri.toString();
-
-                        // Create item details map
-                        Map<String, Object> itemDetails = new HashMap<>();
-                        itemDetails.put("description", description);
-                        itemDetails.put("date", date);
-                        itemDetails.put("category", category);
-                        itemDetails.put("imageUrl", imageUrl);
-                        itemDetails.put("userId", userId);
-                        itemDetails.put("descriptors", descriptorList); // Add descriptors
-                        itemDetails.put("timestamp", FieldValue.serverTimestamp()); // Add timestamp
-                        itemDetails.put("latitude", lastKnownLocation.getLatitude()); // Add latitude
-                        itemDetails.put("longitude", lastKnownLocation.getLongitude()); // Add longitude
-
-                        // Add item details to Firestore under "items" collection
-                        firestore.collection("items").add(itemDetails)
-                                .addOnSuccessListener(documentReference -> {
-                                    Toast.makeText(ItemDetailsActivity.this, "Item submitted successfully!", Toast.LENGTH_SHORT).show();
-                                    finish(); // Close activity after submission
-                                })
-                                .addOnFailureListener(e -> {
-                                    Toast.makeText(ItemDetailsActivity.this, "Failed to submit item details: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                                    Log.e(TAG, "Error submitting item details", e);
-                                });
-                    });
-                })
-                .addOnFailureListener(e -> {
-                    Toast.makeText(ItemDetailsActivity.this, "Failed to upload image: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    Log.e(TAG, "Error uploading image", e);
-                });
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-
-        // Start location updates
-        startLocationUpdates();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-
-        // Stop location updates
-        stopLocationUpdates();
-    }
-
-    private void startLocationUpdates() {
-        LocationRequest locationRequest = LocationRequest.create()
-                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
-                .setInterval(10000) // 10 seconds
-                .setFastestInterval(5000); // 5 seconds
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // Request location permissions if not granted
+    private void requestLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
-            return;
-        }
-
-        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback = new LocationCallback() {
-            @Override
-            public void onLocationResult(LocationResult locationResult) {
-                if (locationResult == null) {
-                    return;
-                }
-                lastKnownLocation = locationResult.getLastLocation();
-            }
-        }, null);
-    }
-
-    private void stopLocationUpdates() {
-        if (locationCallback != null) {
-            fusedLocationClient.removeLocationUpdates(locationCallback);
+        } else {
+            startLocationUpdates();
         }
     }
 
@@ -306,8 +240,34 @@ public class ItemDetailsActivity extends AppCompatActivity {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startLocationUpdates();
             } else {
-                Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Location permission denied.", Toast.LENGTH_SHORT).show();
             }
+        }
+    }
+
+    private void startLocationUpdates() {
+        LocationRequest locationRequest = LocationRequest.create();
+        locationRequest.setInterval(10000);
+        locationRequest.setFastestInterval(5000);
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        fusedLocationClient.removeLocationUpdates(locationCallback);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            startLocationUpdates();
         }
     }
 }
