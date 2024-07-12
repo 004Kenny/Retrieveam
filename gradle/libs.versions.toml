@@ -21,6 +21,7 @@ materialVersion = "1.6.1"
 mongodbDriverSync = "4.3.2"
 opencvAndroid = "4.5.5"
 playServicesLocation = "21.3.0"
+navigationFragment = "2.7.7"
 
 [libraries]
 activity-v140 = { module = "androidx.activity:activity", version.ref = "activityVersion" }
@@ -44,6 +45,7 @@ material-v161 = { module = "com.google.android.material:material", version.ref =
 mongodb-driver-sync = { module = "org.mongodb:mongodb-driver-sync", version.ref = "mongodbDriverSync" }
 opencv-android = { module = "org.opencv:opencv-android", version.ref = "opencvAndroid" }
 play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
+navigation-fragment = { group = "androidx.navigation", name = "navigation-fragment", version.ref = "navigationFragment" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

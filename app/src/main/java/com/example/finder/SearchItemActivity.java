@@ -22,10 +22,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.bumptech.glide.Glide;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
-import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.SetOptions;
 
 import org.opencv.android.OpenCVLoader;
@@ -53,6 +51,7 @@ public class SearchItemActivity extends AppCompatActivity {
     private Uri selectedImageUri;
 
     private FirebaseFirestore firestore;
+    private String targetDocumentId = "jk848ivSiDNEbawRlUDJ"; // Change this to the target document's ID
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -129,88 +128,64 @@ public class SearchItemActivity extends AppCompatActivity {
         Mat descriptors = new Mat();
         orb.detectAndCompute(imgMat, new Mat(), keypoints, descriptors);
 
-        // Store descriptors in Firestore under "missing_item"
-        List<Double> descriptorList = new ArrayList<>();
-        for (int i = 0; i < descriptors.rows(); i++) {
-            for (int j = 0; j < descriptors.cols(); j++) {
-                descriptorList.add((double) descriptors.get(i, j)[0]);
-            }
-        }
-        firestore.collection("items")
-                .document("missing_item")
-                .set(new Item(descriptorList), SetOptions.merge())
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d(TAG, "Descriptors of missing_item successfully updated");
-
-                        // Proceed to compare with other items
-                        compareDescriptorsWithItems(descriptors);
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.w(TAG, "Error updating descriptors of missing_item", e);
-                        loadingSpinner.setVisibility(View.GONE);
-                    }
-                });
+        // Proceed to compare with the target document
+        compareDescriptorsWithTarget(descriptors);
     }
 
-    private void compareDescriptorsWithItems(Mat descriptors) {
+    private void compareDescriptorsWithTarget(Mat descriptors) {
         firestore.collection("items")
+                .document(targetDocumentId)
                 .get()
-                .addOnCompleteListener(task -> {
-                    loadingSpinner.setVisibility(View.GONE);
-                    if (task.isSuccessful()) {
-                        boolean matchFound = false;
-                        int distanceThreshold = 30; // Adjusted for stricter matching
+                .addOnSuccessListener(documentSnapshot -> {
+                    List<Double> storedDescriptorList = (List<Double>) documentSnapshot.get("descriptors");
 
-                        for (QueryDocumentSnapshot document : task.getResult()) {
-                            if (!document.getId().equals("missing_item")) { // Skip the "missing_item" document
-                                List<Double> storedDescriptorList = (List<Double>) document.get("descriptors");
-
-                                if (storedDescriptorList != null && !storedDescriptorList.isEmpty()) {
-                                    // Convert stored descriptors back to Mat
-                                    Mat storedDescriptors = new Mat(storedDescriptorList.size() / descriptors.cols(), descriptors.cols(), CvType.CV_8U);
-                                    int index = 0;
-                                    for (int i = 0; i < storedDescriptors.rows(); i++) {
-                                        for (int j = 0; j < storedDescriptors.cols(); j++) {
-                                            storedDescriptors.put(i, j, storedDescriptorList.get(index++).byteValue());
-                                        }
-                                    }
-
-                                    // Perform matching
-                                    MatOfDMatch matches = new MatOfDMatch();
-                                    DescriptorMatcher matcher = DescriptorMatcher.create(DescriptorMatcher.BRUTEFORCE_HAMMING);
-                                    matcher.match(descriptors, storedDescriptors, matches);
-
-                                    // Check if at least one match is found within the distance threshold
-                                    for (int i = 0; i < matches.rows(); i++) {
-                                        double dist = matches.get(i, 0)[0];
-                                        if (dist < distanceThreshold) {
-                                            matchFound = true;
-                                            break; // Found a match, no need to check further
-                                        }
-                                    }
-
-                                    if (matchFound) {
-                                        break; // Found a match, no need to check further documents
-                                    }
-                                }
+                    if (storedDescriptorList != null && !storedDescriptorList.isEmpty()) {
+                        // Convert stored descriptors back to Mat
+                        Mat storedDescriptors = new Mat(storedDescriptorList.size() / descriptors.cols(), descriptors.cols(), CvType.CV_8U);
+                        int index = 0;
+                        for (int i = 0; i < storedDescriptors.rows(); i++) {
+                            for (int j = 0; j < storedDescriptors.cols(); j++) {
+                                storedDescriptors.put(i, j, storedDescriptorList.get(index++).byteValue());
                             }
                         }
+
+                        // Perform matching
+                        MatOfDMatch matches = new MatOfDMatch();
+                        DescriptorMatcher matcher = DescriptorMatcher.create(DescriptorMatcher.BRUTEFORCE_HAMMING);
+                        matcher.match(descriptors, storedDescriptors, matches);
+
+                        // Check if a match is found
+                        double minDist = Double.MAX_VALUE;
+
+                        // Calculate min distance between keypoints
+                        for (int i = 0; i < matches.rows(); i++) {
+                            double dist = matches.get(i, 0)[0];
+                            if (dist < minDist) minDist = dist;
+                        }
+
+                        // Set your custom threshold
+                        double distanceThreshold = 0.000000000001; // Adjust this threshold as needed
+
+                        // Consider matches if the distance is less than the threshold
+                        boolean matchFound = (minDist > distanceThreshold);
+
+                        loadingSpinner.setVisibility(View.GONE);
                         if (matchFound) {
                             runOnUiThread(() -> Toast.makeText(SearchItemActivity.this, "Potential match found!", Toast.LENGTH_SHORT).show());
                         } else {
                             runOnUiThread(() -> Toast.makeText(SearchItemActivity.this, "No match found.", Toast.LENGTH_SHORT).show());
                         }
                     } else {
-                        runOnUiThread(() -> Toast.makeText(SearchItemActivity.this, "Error retrieving items from Firestore", Toast.LENGTH_SHORT).show());
+                        loadingSpinner.setVisibility(View.GONE);
+                        runOnUiThread(() -> Toast.makeText(SearchItemActivity.this, "Error retrieving descriptors from target document", Toast.LENGTH_SHORT).show());
                     }
+                })
+                .addOnFailureListener(e -> {
+                    loadingSpinner.setVisibility(View.GONE);
+                    Log.e(TAG, "Error retrieving descriptors from target document", e);
+                    runOnUiThread(() -> Toast.makeText(SearchItemActivity.this, "Error retrieving descriptors", Toast.LENGTH_SHORT).show());
                 });
     }
-
 
 
     // Helper class for Firestore document

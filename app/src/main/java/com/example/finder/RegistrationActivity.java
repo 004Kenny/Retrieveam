@@ -53,25 +53,5 @@ public class RegistrationActivity extends AppCompatActivity {
         });
     }
 
-    /*
-    private void signUpNewUser() {
-        // Replace with your registration logic
-        mAuth.createUserWithEmailAndPassword("user@example.com", "password")
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Sign up success, navigate to next activity
-                            Intent intent = new Intent(RegistrationActivity.this, MainActivity.class);
-                            startActivity(intent);
-                        } else {
-                            // If sign up fails, display a message to the user.
-                            Toast.makeText(RegistrationActivity.this, "Authentication failed.",
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-    }
 
-    */
 }

@@ -1,11 +1,13 @@
 package com.example.finder;
 
-import android.content.Intent;
 import android.os.Bundle;
+import android.view.Menu; // Add this import
+
 import androidx.appcompat.app.AppCompatActivity;
-import android.widget.ImageButton;
-import android.widget.ImageView;
-import com.bumptech.glide.Glide;
+import androidx.navigation.NavController;
+import androidx.navigation.fragment.NavHostFragment;
+import androidx.navigation.ui.NavigationUI;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -14,30 +16,15 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        ImageButton settingsButton = findViewById(R.id.settingsButton);
-        ImageView bannerImageView = findViewById(R.id.bannerImageView);
+        // Initialize BottomNavigationView
+        BottomNavigationView bottomNavigationView = findViewById(R.id.bottom_navigation);
 
-        // Load the image using Glide
-        Glide.with(this)
-                .load("https://cdn.usegalileo.ai/stability/d93c4d79-5a90-44fd-9987-01703881c325.png")
-                .into(bannerImageView);
+        // Initialize NavHostFragment and NavController
+        NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.nav_host_fragment);
+        NavController navController = navHostFragment.getNavController();
 
-        settingsButton.setOnClickListener(v -> {
-            // Handle settings button click
-        });
-
-
-        findViewById(R.id.start_searching_button).setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, SearchItemActivity.class);
-            startActivity(intent);
-        });
-
-
-        findViewById(R.id.report_lost_item_button).setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, ReportItemActivity.class);
-            startActivity(intent);
-        });
-
-
+        // Setup NavigationUI
+        NavigationUI.setupWithNavController(bottomNavigationView, navController);
     }
 }
